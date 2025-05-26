@@ -11,7 +11,8 @@ PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 
 # إنشاء عميل cohere V2
-client = ClientV2(api_key="<YOUR_API_KEY>")
+client = ClientV2(api_key=COHERE_API_KEY)
+
 
 def send_message(recipient_id, text):
     """إرسال رسالة نصية إلى مستخدم في فيسبوك"""
@@ -83,4 +84,4 @@ def webhook():
 
 if __name__ == "__main__":
     # تشغيل السيرفر مع تفعيل التصحيح لتتبع الأخطاء
-    app.run(debug=True)
+    app.run(debug=True, port=10000)
