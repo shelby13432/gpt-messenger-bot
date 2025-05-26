@@ -27,9 +27,8 @@ def send_message(recipient_id, text):
     except requests.exceptions.RequestException as e:
         print(f"Error sending message: {e}")
 
-@app.route("/", methods=["GET"])
+@app.route("/webhook", methods=["GET"])
 def verify():
-    """تأكيد التحقق من Webhook مع فيسبوك"""
     token = request.args.get("hub.verify_token")
     challenge = request.args.get("hub.challenge")
     if token == VERIFY_TOKEN:
@@ -37,9 +36,8 @@ def verify():
     else:
         return "Invalid verification token", 403
 
-@app.route("/", methods=["POST"])
+@app.route("/webhook", methods=["POST"])
 def webhook():
-    """التعامل مع الرسائل الواردة من فيسبوك"""
     data = request.get_json()
     if not data:
         return "No data received", 400
