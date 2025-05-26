@@ -1,7 +1,7 @@
 from flask import Flask, request
 import requests
 import os
-import cohere
+from cohere import ClientV2
 
 app = Flask(__name__)
 
@@ -10,7 +10,7 @@ VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 
-# إنشاء عميل cohere
+# إنشاء عميل cohere V2
 co = ClientV2(api_key=COHERE_API_KEY)
 
 def send_message(recipient_id, text):
@@ -50,25 +50,33 @@ def webhook():
                 sender_id = messaging_event["sender"]["id"]
                 message_text = messaging_event["message"]["text"]
 
-                prompt = f"""
-أنت بوت مساعد للرد على استفسارات الزبائن في صفحة فيسبوك. كن ودودًا ومفيدًا.
-
-سؤال: {message_text}
-جواب:
-"""
+                # تكوين رسالة المستخدم بصيغة chat API
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": f"أنت بوت مساعد للرد على استفسارات الزبائن في صفحة فيسبوك. كن ودودًا ومفيدًا.\n\nسؤال: {message_text}\nجواب:"
+                            }
+                        ]
+                    }
+                ]
 
                 try:
-    response = co.chat(
-        model="command-r",
-        messages=messages,
-        temperature=0.5
-    )
-    reply = response.choices[0].message["content"][0]["text"].strip()
-    if not reply:
-        reply = "عذرًا، لم أفهم سؤالك، هل يمكنك إعادة الصياغة؟"
-except Exception as e:
-    print(f"Error calling Cohere API: {e}")
-    reply = "عذرًا، حدث خطأ داخلي. الرجاء المحاولة لاحقًا."
+                    response = co.chat(
+                        model="command-r",
+                        messages=messages,
+                        temperature=0.5,
+                        max_tokens=100
+                    )
+                    # استخراج نص الرد
+                    reply = response.choices[0].message["content"][0]["text"].strip()
+                    if not reply:
+                        reply = "عذرًا، لم أفهم سؤالك، هل يمكنك إعادة الصياغة؟"
+                except Exception as e:
+                    print(f"Error calling Cohere API: {e}")
+                    reply = "عذرًا، حدث خطأ داخلي. الرجاء المحاولة لاحقًا."
 
                 send_message(sender_id, reply)
 
@@ -76,4 +84,3 @@ except Exception as e:
 
 if __name__ == "__main__":
     app.run(debug=True)
-
