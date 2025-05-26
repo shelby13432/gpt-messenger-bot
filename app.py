@@ -11,7 +11,7 @@ PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 
 # إنشاء عميل cohere V2
-co = ClientV2(api_key=COHERE_API_KEY)
+client = ClientV2(api_key="<YOUR_API_KEY>")
 
 def send_message(recipient_id, text):
     """إرسال رسالة نصية إلى مستخدم في فيسبوك"""
@@ -69,7 +69,8 @@ def webhook():
                         max_tokens=100
                     )
                     # استخراج نص الرد من نتيجة API
-                    reply = response.message["content"][0]["text"].strip()
+                    reply = response.message.text.strip()
+
                     if not reply:
                         reply = "عذرًا، لم أفهم سؤالك، هل يمكنك إعادة الصياغة؟"
                 except Exception as e:
