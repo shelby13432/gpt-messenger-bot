@@ -40,6 +40,15 @@ DEVICES = {
     # أضف باقي الأجهزة بنفس النمط...
 }
 
+# لتتبع حالة المحادثة لكل مستخدم
+user_states = {}
+# ممكن يكون شكل الحالة مثلا:
+# user_states[user_id] = {
+#     "step": "waiting_for_device" / "waiting_for_contact" / None,
+#     "device_name": None,
+#     "contact_info": None,
+# }
+
 def format_device_info(device_name, info):
     return (f"الجهاز: {device_name}\n"
             f"السعر: {info['السعر']}\n"
@@ -75,21 +84,60 @@ def webhook():
                     if not user_message:
                         return "ok", 200
 
+                    user_message_lower = user_message.lower()
+
+                    # الحالة الحالية للمستخدم
+                    state = user_states.get(sender_id, {"step": None, "device_name": None, "contact_info": None})
+
+                    # 1. إذا المستخدم في خطوة انتظار اسم الجهاز (بعد طلب الحجز)
+                    if state["step"] == "waiting_for_device":
+                        device_name = None
+                        for dname in DEVICES:
+                            if dname.lower() in user_message_lower:
+                                device_name = dname
+                                break
+                        if device_name:
+                            # وجد الجهاز
+                            user_states[sender_id] = {"step": "waiting_for_contact", "device_name": device_name, "contact_info": None}
+                            send_message(sender_id, f"الجهاز {device_name} متوفر للحجز.\nرجاءً أرسل رقم هاتفك وعنوانك لإتمام الحجز.")
+                        else:
+                            send_message(sender_id, "عذرًا، هذا الجهاز غير متوفر في مكتب الأصيل. الرجاء إرسال اسم جهاز آخر أو اكتب 'خروج' للخروج من الحجز.")
+                        return "ok", 200
+
+                    # 2. إذا المستخدم في خطوة انتظار بيانات الاتصال (رقم هاتف وعنوان)
+                    elif state["step"] == "waiting_for_contact":
+                        # نفترض أي رسالة ليست أمر خروج تعتبر بيانات الاتصال
+                        if user_message_lower == "خروج":
+                            user_states[sender_id] = {"step": None, "device_name": None, "contact_info": None}
+                            send_message(sender_id, "تم إلغاء الحجز. إذا احتجت أي مساعدة أخرى، أنا هنا.")
+                        else:
+                            # خزّن البيانات وأكد الحجز
+                            user_states[sender_id] = {"step": None, "device_name": state["device_name"], "contact_info": user_message}
+                            send_message(sender_id, f"تم تسجيل حجز جهاز {state['device_name']} بنجاح.\nسنتواصل معك قريبًا عبر الرقم والعنوان: {user_message}\nشكرًا لتواصلك مع مكتب الأصيل.")
+                        return "ok", 200
+
+                    # 3. إذا المستخدم طلب الحجز (يحتوي على كلمة حجز)
+                    elif "حجز" in user_message_lower or "أريد أحجز" in user_message_lower or "أريد احجز" in user_message_lower or "أريد أشتري" in user_message_lower:
+                        user_states[sender_id] = {"step": "waiting_for_device", "device_name": None, "contact_info": None}
+                        send_message(sender_id, "مرحبًا! لتتمكن من الحجز، من فضلك اذكر اسم الجهاز الذي تريد حجزه.")
+                        return "ok", 200
+
+                    # 4. أي رسالة أخرى: رد باستخدام OpenAI مع معرفة بيانات الجهاز إذا ذُكر اسم جهاز
                     matched_device = None
                     for device_name in DEVICES:
-                        if device_name.lower() in user_message.lower():
+                        if device_name.lower() in user_message_lower:
                             matched_device = device_name
                             break
 
                     if matched_device:
                         device_info = format_device_info(matched_device, DEVICES[matched_device])
                         system_prompt = (
-                            f"أنت مساعد ذكي يتحدث العربية ويجيب باحترافية.\n"
-                            f"هذه معلومات عن الجهاز الذي سأذكره:\n{device_info}\n"
+                            f"أنت موظف مبيعات في مكتب الأصيل ترد على الزبائن بأسلوب مهذب واحترافي.\n"
+                            f"هذه معلومات عن الجهاز:\n{device_info}\n"
                             f"أجب على السؤال التالي بناءً على هذه المعلومات."
                         )
                     else:
-                        system_prompt = "أنت مساعد ذكي يتحدث العربية ويجيب باحترافية."
+                        system_prompt = "أنت موظف مبيعات في مكتب الأصيل ترد على الزبائن بأسلوب مهذب واحترافي."
 
                     response = openai.chat.completions.create(
                         model="gpt-3.5-turbo",
