@@ -9,6 +9,7 @@ PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+# تهيئة مفتاح OpenAI
 openai.api_key = OPENAI_API_KEY
 
 def send_message(recipient_id, message_text):
@@ -35,21 +36,23 @@ def webhook():
             for messaging_event in entry['messaging']:
                 if messaging_event.get('message'):
                     sender_id = messaging_event['sender']['id']
-
                     user_message = messaging_event['message'].get('text')
+                    
                     if not user_message:
                         return "ok", 200
 
                     system_prompt = "أنت مساعد ذكي يتحدث العربية ويجيب باحترافية."
 
-                    response = openai.ChatCompletion.create(
+                    # استخدام الطريقة الحديثة في مكتبة OpenAI
+                    response = openai.chat.completions.create(
                         model="gpt-3.5-turbo",
                         messages=[
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_message}
                         ]
                     )
-                    reply = response.choices[0].message['content']
+
+                    reply = response.choices[0].message.content
                     send_message(sender_id, reply)
     return "ok", 200
 
