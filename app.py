@@ -11,6 +11,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 openai.api_key = OPENAI_API_KEY
 
+ALLOWED_SENDER_ID = "61557147230564"  # معرف المستخدم المسموح له فقط
+
 def send_message(recipient_id, message_text):
     params = {"access_token": PAGE_ACCESS_TOKEN}
     headers = {"Content-Type": "application/json"}
@@ -44,11 +46,14 @@ def webhook():
             for messaging_event in entry.get('messaging', []):
                 if messaging_event.get('message'):
                     sender_id = messaging_event['sender']['id']
-                    user_message = messaging_event['message'].get('text')
+                    
+                    # فقط نرد إذا المرسل هو المسموح له
+                    if sender_id != ALLOWED_SENDER_ID:
+                        return "ok", 200  # تجاهل أي شخص آخر
 
+                    user_message = messaging_event['message'].get('text')
                     if not user_message:
-                        # إذا الرسالة ليست نصية، نتجاهلها
-                        return "ok", 200
+                        return "ok", 200  # إذا الرسالة ليست نصية نتجاهل
 
                     system_prompt = "أنت مساعد ذكي يتحدث العربية ويجيب باحترافية."
 
