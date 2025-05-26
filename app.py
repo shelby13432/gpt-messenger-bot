@@ -39,12 +39,27 @@ def webhook():
                 sender_id = messaging_event["sender"]["id"]
                 message_text = messaging_event["message"].get("text")
                 if message_text:
-                    response = co.chat(
-                        message=message_text,
-                        model="command-r-plus",
-                        temperature=0.5,
-                        chat_history=[]
-                    )
-                    reply = response.text
+                    prompt = f"""
+                    أنت بوت مساعد للرد على استفسارات الزبائن في صفحة فيسبوك. كن ودودًا ومفيدًا.
+
+                    سؤال: {message_text}
+                    جواب:
+                    """
+
+                    try:
+                        response = co.generate(
+                            model="command-r-plus",
+                            prompt=prompt,
+                            max_tokens=100,
+                            temperature=0.5,
+                            stop_sequences=["\n"]
+                        )
+                        reply = response.generations[0].text.strip()
+                        if not reply:
+                            reply = "عذرًا، لم أفهم سؤالك، هل يمكنك إعادة الصياغة؟"
+                    except Exception as e:
+                        print(f"Error calling Cohere API: {e}")
+                        reply = "عذرًا، حدث خطأ داخلي. الرجاء المحاولة لاحقًا."
+
                     send_message(sender_id, reply)
     return "ok", 200
