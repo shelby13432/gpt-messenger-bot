@@ -8,12 +8,13 @@ app = Flask(__name__)
 
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")  # تأكد من تعيين هذا المتغير
 
-# تهيئة مفتاح OpenAI
-openai.api_key = OPENAI_API_KEY
+# إعداد مفتاح DeepSeek وواجهة الاتصال
+openai.api_key = DEEPSEEK_API_KEY
+openai.base_url = "https://api.deepseek.com/v1"  # هذا مهم جداً
 
-# جلسة محادثة لكل مستخدم (مؤقتة في الذاكرة)
+# جلسة محادثة لكل مستخدم
 user_sessions = defaultdict(list)
 
 def send_message(recipient_id, message_text):
@@ -45,8 +46,7 @@ def webhook():
                     if not user_message:
                         return "ok", 200
 
-                    # تعريف البرومبت مرة واحدة
-                    system_prompt = """
+                     system_prompt = """
                     أنت موظف مبيعات في مكتب الأصيل ترد على الزبائن بأسلوب مهذب واحترافي.
                     الاجهزة المتوفرة مع اسعارهم ومواصفاتهم هم 📱 سامسونج:
 
@@ -227,15 +227,13 @@ def webhook():
                     رجاءً أجب على سؤال العميل بناءً على هذه المعلومات بأسلوب مهذب واحترافي.
                     """
 
-                    # اضف رسالة المستخدم إلى جلسة المحادثة
+
                     user_sessions[sender_id].append({"role": "user", "content": user_message})
 
-                    # إعداد الرسائل كاملة (system + user history)
                     messages = [{"role": "system", "content": system_prompt}] + user_sessions[sender_id]
 
-                    # طلب من GPT
                     response = openai.chat.completions.create(
-                        model="gpt-3.5-turbo",
+                        model="deepseek-chat",  # هذا هو اسم موديل DeepSeek
                         messages=messages,
                         max_tokens=500,
                         temperature=0.7
@@ -243,10 +241,8 @@ def webhook():
 
                     reply = response.choices[0].message.content
 
-                    # أرسل الرد للمستخدم
                     send_message(sender_id, reply)
 
-                    # **اختياري**: للحفاظ على الذاكرة، قلل طول الجلسة إذا كبرت جداً (احذف أقدم الرسائل)
                     if len(user_sessions[sender_id]) > 10:
                         user_sessions[sender_id] = user_sessions[sender_id][-10:]
 
