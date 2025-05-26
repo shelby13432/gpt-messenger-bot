@@ -58,19 +58,17 @@ def webhook():
 """
 
                 try:
-                     response = co.chat(
-                        model="command-r",
-                        prompt=prompt,
-                        max_tokens=100,
-                        temperature=0.5,
-                        stop_sequences=["\n"]
-                    )
-                    reply = response.generations[0].text.strip()
-                    if not reply:
-                        reply = "عذرًا، لم أفهم سؤالك، هل يمكنك إعادة الصياغة؟"
-                except Exception as e:
-                    print(f"Error calling Cohere API: {e}")
-                    reply = "عذرًا، حدث خطأ داخلي. الرجاء المحاولة لاحقًا."
+    response = co.chat(
+        model="command-r",
+        messages=messages,
+        temperature=0.5
+    )
+    reply = response.choices[0].message["content"][0]["text"].strip()
+    if not reply:
+        reply = "عذرًا، لم أفهم سؤالك، هل يمكنك إعادة الصياغة؟"
+except Exception as e:
+    print(f"Error calling Cohere API: {e}")
+    reply = "عذرًا، حدث خطأ داخلي. الرجاء المحاولة لاحقًا."
 
                 send_message(sender_id, reply)
 
