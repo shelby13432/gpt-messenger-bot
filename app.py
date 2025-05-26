@@ -62,7 +62,7 @@ def webhook():
                 ]
 
                 try:
-                    response = co.chat(
+                    response = client.chat(
                         model="command-r",
                         messages=messages,
                         temperature=0.5,
