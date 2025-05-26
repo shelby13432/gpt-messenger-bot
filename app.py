@@ -39,7 +39,7 @@ def verify():
 
 @app.route("/", methods=["POST"])
 def webhook():
-    """التعامل مع الرسائل الواردة"""
+    """التعامل مع الرسائل الواردة من فيسبوك"""
     data = request.get_json()
     if not data:
         return "No data received", 400
@@ -50,7 +50,7 @@ def webhook():
                 sender_id = messaging_event["sender"]["id"]
                 message_text = messaging_event["message"]["text"]
 
-                # تكوين رسالة المستخدم بصيغة chat API
+                # تكوين رسالة المستخدم بصيغة chat API الخاصة بـ Cohere
                 messages = [
                     {
                         "role": "user",
@@ -70,7 +70,7 @@ def webhook():
                         temperature=0.5,
                         max_tokens=100
                     )
-                    # استخراج نص الرد
+                    # استخراج نص الرد من نتيجة API
                     reply = response.choices[0].message["content"][0]["text"].strip()
                     if not reply:
                         reply = "عذرًا، لم أفهم سؤالك، هل يمكنك إعادة الصياغة؟"
@@ -83,4 +83,5 @@ def webhook():
     return "ok", 200
 
 if __name__ == "__main__":
+    # تشغيل السيرفر مع تفعيل التصحيح لتتبع الأخطاء
     app.run(debug=True)
