@@ -11,7 +11,7 @@ PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 
 # إنشاء عميل cohere
-co = cohere.Client(COHERE_API_KEY)
+co = ClientV2(api_key=COHERE_API_KEY)
 
 def send_message(recipient_id, text):
     """إرسال رسالة نصية إلى مستخدم في فيسبوك"""
@@ -58,8 +58,8 @@ def webhook():
 """
 
                 try:
-                    response = co.generate(
-                        model="command-r-plus",
+                     response = co.chat(
+                        model="command-r",
                         prompt=prompt,
                         max_tokens=100,
                         temperature=0.5,
