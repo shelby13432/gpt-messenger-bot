@@ -50,17 +50,21 @@ def webhook():
                 message_text = messaging_event["message"]["text"]
 
                 # تكوين رسالة المستخدم بصيغة chat API الخاصة بـ Cohere
-                messages = [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": f"أنت بوت مساعد للرد على استفسارات الزبائن في صفحة فيسبوك. كن ودودًا ومفيدًا.\n\nسؤال: {message_text}\nجواب:"
-                            }
-                        ]
-                    }
-                ]
+                messages=[
+		{
+			"role": "user",
+			"content": [
+				{
+					"type": "text",
+					"text": "مرحبا"
+				}
+			]
+		},
+		{
+			"role": "assistant",
+			"content": "مرحبا بك! كيف يمكنني مساعدتك اليوم؟"
+		}
+	]
 
                 try:
                     response = client.chat(
