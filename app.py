@@ -11,7 +11,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 openai.api_key = OPENAI_API_KEY
 
-ALLOWED_SENDER_ID = "61557147230564"  # معرف المستخدم المسموح له فقط
+allowed_ids = ["61557147230564", "61550021575716"]  # معرف المستخدم المسموح له فقط
 
 def send_message(recipient_id, message_text):
     params = {"access_token": PAGE_ACCESS_TOKEN}
@@ -48,7 +48,7 @@ def webhook():
                     sender_id = messaging_event['sender']['id']
                     
                     # فقط نرد إذا المرسل هو المسموح له
-                    if sender_id != ALLOWED_SENDER_ID:
+                    if sender_id not in allowed_ids:
                         return "ok", 200  # تجاهل أي شخص آخر
 
                     user_message = messaging_event['message'].get('text')
