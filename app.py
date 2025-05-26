@@ -2,6 +2,7 @@ from flask import Flask, request
 import requests
 import os
 import openai
+from collections import defaultdict
 
 app = Flask(__name__)
 
@@ -9,52 +10,11 @@ PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+# تهيئة مفتاح OpenAI
 openai.api_key = OPENAI_API_KEY
 
-# قاعدة بيانات الأجهزة - يمكن توسعتها حسب الحاجة
-DEVICES = {
-    "S22 Ultra 128GB": {
-        "السعر": "515 ألف",
-        "المعالج": "Snapdragon 8 Gen 1",
-        "الكاميرا": "108MP رباعية",
-        "البطارية": "5000mAh"
-    },
-    "S22 Ultra 512GB": {
-        "السعر": "575 ألف",
-        "المعالج": "Snapdragon 8 Gen 1",
-        "الكاميرا": "108MP رباعية",
-        "البطارية": "5000mAh"
-    },
-    "S23 Ultra 256GB": {
-        "السعر": "725 ألف",
-        "المعالج": "Snapdragon 8 Gen 2",
-        "الكاميرا": "200MP رباعية",
-        "البطارية": "5000mAh"
-    },
-    "iPhone 14 128GB": {
-        "السعر": "550 ألف",
-        "المعالج": "A15 Bionic",
-        "الكاميرا": "12MP مزدوجة",
-        "البطارية": "3279mAh"
-    },
-    # أضف باقي الأجهزة بنفس النمط...
-}
-
-# لتتبع حالة المحادثة لكل مستخدم
-user_states = {}
-# ممكن يكون شكل الحالة مثلا:
-# user_states[user_id] = {
-#     "step": "waiting_for_device" / "waiting_for_contact" / None,
-#     "device_name": None,
-#     "contact_info": None,
-# }
-
-def format_device_info(device_name, info):
-    return (f"الجهاز: {device_name}\n"
-            f"السعر: {info['السعر']}\n"
-            f"المعالج: {info['المعالج']}\n"
-            f"الكاميرا: {info['الكاميرا']}\n"
-            f"البطارية: {info['البطارية']}")
+# جلسة محادثة لكل مستخدم (مؤقتة في الذاكرة)
+user_sessions = defaultdict(list)
 
 def send_message(recipient_id, message_text):
     params = {"access_token": PAGE_ACCESS_TOKEN}
@@ -81,73 +41,215 @@ def webhook():
                 if messaging_event.get('message'):
                     sender_id = messaging_event['sender']['id']
                     user_message = messaging_event['message'].get('text')
+                    
                     if not user_message:
                         return "ok", 200
 
-                    user_message_lower = user_message.lower()
+                    # تعريف البرومبت مرة واحدة
+                    system_prompt = """
+                    أنت موظف مبيعات في مكتب الأصيل ترد على الزبائن بأسلوب مهذب واحترافي.
+                    الاجهزة المتوفرة مع اسعارهم ومواصفاتهم هم 📱 سامسونج:
 
-                    # الحالة الحالية للمستخدم
-                    state = user_states.get(sender_id, {"step": None, "device_name": None, "contact_info": None})
+                    - S22 Ultra 128GB - 515 ألف  
+                      معالج: Snapdragon 8 Gen 1  
+                      كاميرا: 108MP رباعية  
+                      بطارية: 5000mAh  
 
-                    # 1. إذا المستخدم في خطوة انتظار اسم الجهاز (بعد طلب الحجز)
-                    if state["step"] == "waiting_for_device":
-                        device_name = None
-                        for dname in DEVICES:
-                            if dname.lower() in user_message_lower:
-                                device_name = dname
-                                break
-                        if device_name:
-                            # وجد الجهاز
-                            user_states[sender_id] = {"step": "waiting_for_contact", "device_name": device_name, "contact_info": None}
-                            send_message(sender_id, f"الجهاز {device_name} متوفر للحجز.\nرجاءً أرسل رقم هاتفك وعنوانك لإتمام الحجز.")
-                        else:
-                            send_message(sender_id, "عذرًا، هذا الجهاز غير متوفر في مكتب الأصيل. الرجاء إرسال اسم جهاز آخر أو اكتب 'خروج' للخروج من الحجز.")
-                        return "ok", 200
+                    - S22 Ultra 512GB - 575 ألف  
+                      نفس المواصفات مع زيادة التخزين  
 
-                    # 2. إذا المستخدم في خطوة انتظار بيانات الاتصال (رقم هاتف وعنوان)
-                    elif state["step"] == "waiting_for_contact":
-                        # نفترض أي رسالة ليست أمر خروج تعتبر بيانات الاتصال
-                        if user_message_lower == "خروج":
-                            user_states[sender_id] = {"step": None, "device_name": None, "contact_info": None}
-                            send_message(sender_id, "تم إلغاء الحجز. إذا احتجت أي مساعدة أخرى، أنا هنا.")
-                        else:
-                            # خزّن البيانات وأكد الحجز
-                            user_states[sender_id] = {"step": None, "device_name": state["device_name"], "contact_info": user_message}
-                            send_message(sender_id, f"تم تسجيل حجز جهاز {state['device_name']} بنجاح.\nسنتواصل معك قريبًا عبر الرقم والعنوان: {user_message}\nشكرًا لتواصلك مع مكتب الأصيل.")
-                        return "ok", 200
+                    - S23 Ultra 256GB - 725 ألف  
+                      معالج: Snapdragon 8 Gen 2  
+                      كاميرا: 200MP رباعية  
+                      بطارية: 5000mAh  
 
-                    # 3. إذا المستخدم طلب الحجز (يحتوي على كلمة حجز)
-                    elif "حجز" in user_message_lower or "أريد أحجز" in user_message_lower or "أريد احجز" in user_message_lower or "أريد أشتري" in user_message_lower:
-                        user_states[sender_id] = {"step": "waiting_for_device", "device_name": None, "contact_info": None}
-                        send_message(sender_id, "مرحبًا! لتتمكن من الحجز، من فضلك اذكر اسم الجهاز الذي تريد حجزه.")
-                        return "ok", 200
+                    - S23 Ultra 512GB - 765 ألف  
+                      نفس المواصفات مع زيادة التخزين  
 
-                    # 4. أي رسالة أخرى: رد باستخدام OpenAI مع معرفة بيانات الجهاز إذا ذُكر اسم جهاز
-                    matched_device = None
-                    for device_name in DEVICES:
-                        if device_name.lower() in user_message_lower:
-                            matched_device = device_name
-                            break
+                    - Note 20 Ultra 128GB - 415 ألف  
+                      معالج: Exynos 990  
+                      كاميرا: 108MP ثلاثية  
+                      بطارية: 4500mAh  
 
-                    if matched_device:
-                        device_info = format_device_info(matched_device, DEVICES[matched_device])
-                        system_prompt = (
-                            f"أنت موظف مبيعات في مكتب الأصيل ترد على الزبائن بأسلوب مهذب واحترافي.\n"
-                            f"هذه معلومات عن الجهاز:\n{device_info}\n"
-                            f"أجب على السؤال التالي بناءً على هذه المعلومات."
-                        )
-                    else:
-                        system_prompt = "أنت موظف مبيعات في مكتب الأصيل ترد على الزبائن بأسلوب مهذب واحترافي."
+                    - S23 Plus 256GB - 525 ألف  
+                      معالج: Snapdragon 8 Gen 2  
+                      كاميرا: 50MP ثنائية  
+                      بطارية: 4700mAh  
 
+                    - S23 Plus 512GB - 570 ألف  
+                      نفس المواصفات مع زيادة التخزين  
+
+                    - A54 128GB - 260 ألف  
+                      معالج: Exynos 1380  
+                      كاميرا: 50MP ثلاثية  
+                      بطارية: 5000mAh  
+
+                    - A71 128GB - 190 ألف  
+                      معالج: Snapdragon 730  
+                      كاميرا: 64MP رباعية  
+                      بطارية: 4500mAh  
+
+                    - Flip 5 512GB - 575 ألف  
+                      معالج: Snapdragon 8 Gen 2  
+                      كاميرا: 12MP مزدوجة  
+                      بطارية: 3700mAh  
+
+                    - Flip 4 128GB - 390 ألف  
+                      معالج: Snapdragon 8+ Gen 1  
+                      كاميرا: 12MP مزدوجة  
+                      بطارية: 3700mAh  
+
+
+                    سوني:
+
+                    - Xperia 1 Mark 4 256GB - 375 ألف  
+                      معالج: Snapdragon 8 Gen 1  
+                      كاميرا: 12MP ثلاثية  
+                      بطارية: 5000mAh  
+
+                    - Xperia 5 Mark 4 128GB - 250 ألف  
+                      معالج: Snapdragon 8 Gen 1  
+                      كاميرا: 12MP ثلاثية  
+                      بطارية: 5000mAh  
+
+                    - Xperia 5 Mark 3 128GB - 215 ألف  
+                      معالج: Snapdragon 888  
+                      كاميرا: 12MP ثلاثية  
+                      بطارية: 4500mAh  
+
+                    - Xperia 1 Mark 4 (شاشة طابعة) 256GB - 290 ألف  
+                      نفس المواصفات مع تركيز على الشاشة  
+
+
+                    لايكا:
+
+                    - Leica Phone 2 512GB - 350 ألف  
+                      معالج: Snapdragon 888  
+                      كاميرا: Leica 20MP مزدوجة  
+                      بطارية: 4500mAh  
+
+                    - Leica Phone 1 256GB - 195 ألف  
+                      معالج: Snapdragon 765G  
+                      كاميرا: Leica 20MP مزدوجة  
+                      بطارية: 4300mAh  
+
+
+                    آيباد Apple:
+
+                    - iPad Air 4 64GB - 400 ألف  
+                      معالج: A14 Bionic  
+                      كاميرا: 12MP خلفية  
+                      بطارية: حتى 10 ساعات استخدام  
+
+                    - iPad Mini 6 64GB - 460 ألف  
+                      معالج: A15 Bionic  
+                      كاميرا: 12MP خلفية  
+                      بطارية: حتى 10 ساعات استخدام  
+
+                    - iPad Pro 2016 (9.7 إنش) 128GB - 125 ألف  
+                      معالج: A9X  
+                      كاميرا: 12MP خلفية  
+                      بطارية: حتى 10 ساعات استخدام  
+
+                    - iPad Air 3 64GB - 225 ألف  
+                      معالج: A12 Bionic  
+                      كاميرا: 8MP خلفية  
+                      بطارية: حتى 10 ساعات استخدام  
+
+
+                    Google Pixel:
+
+                    - Pixel 8 Pro 128GB - 600 ألف  
+                      معالج: Google Tensor G3  
+                      كاميرا: 50MP ثلاثية  
+                      بطارية: 5000mAh  
+
+                    - Pixel 8 Pro 256GB - 650 ألف  
+                      نفس المواصفات مع زيادة التخزين  
+
+                    - Pixel 8 Pro 512GB - 690 ألف  
+                      نفس المواصفات مع زيادة التخزين  
+
+                    - Pixel 7 Pro 256GB - 450 ألف  
+                      معالج: Google Tensor G2  
+                      كاميرا: 50MP ثلاثية  
+                      بطارية: 5000mAh  
+
+                    - Pixel 7 Pro 128GB - 400 ألف  
+                      نفس المواصفات مع تخزين أقل  
+
+                    - Pixel 6 Pro 256GB - 315 ألف  
+                      معالج: Google Tensor  
+                      كاميرا: 50MP ثلاثية  
+                      بطارية: 5000mAh  
+
+                    - Pixel Fold 1 256GB - 625 ألف  
+                      معالج: Google Tensor G2  
+                      كاميرا: 48MP مزدوجة  
+                      بطارية: 4400mAh  
+
+
+                    ون بلس:
+
+                    - OnePlus 9 128GB - 225 ألف  
+                      معالج: Snapdragon 888  
+                      كاميرا: 48MP مزدوجة  
+                      بطارية: 4500mAh  
+
+                    - OnePlus 10 Pro 128GB - 400 ألف  
+                      معالج: Snapdragon 8 Gen 1  
+                      كاميرا: 48MP رباعية  
+                      بطارية: 5000mAh  
+
+                    - OnePlus Nord 1 128GB - 190 ألف  
+                      معالج: Snapdragon 765G  
+                      كاميرا: 48MP مزدوجة  
+                      بطارية: 4115mAh  
+
+
+                    آيفونات:
+
+                    - iPhone XS Max 256GB - 300 ألف  
+                      معالج: A12 Bionic  
+                      كاميرا: 12MP مزدوجة  
+                      بطارية: 3174mAh  
+
+                    - iPhone 14 128GB - 550 ألف  
+                      معالج: A15 Bionic  
+                      كاميرا: 12MP مزدوجة  
+                      بطارية: 3279mAh  
+
+                    - iPhone 13 128GB - 450 ألف  
+                      معالج: A15 Bionic  
+                      كاميرا: 12MP مزدوجة  
+                      بطارية: 3240mAh  
+
+                    رجاءً أجب على سؤال العميل بناءً على هذه المعلومات بأسلوب مهذب واحترافي.
+                    """
+
+                    # اضف رسالة المستخدم إلى جلسة المحادثة
+                    user_sessions[sender_id].append({"role": "user", "content": user_message})
+
+                    # إعداد الرسائل كاملة (system + user history)
+                    messages = [{"role": "system", "content": system_prompt}] + user_sessions[sender_id]
+
+                    # طلب من GPT
                     response = openai.chat.completions.create(
                         model="gpt-3.5-turbo",
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_message}
-                        ]
+                        messages=messages,
+                        max_tokens=500,
+                        temperature=0.7
                     )
+
                     reply = response.choices[0].message.content
+
+                    # أرسل الرد للمستخدم
                     send_message(sender_id, reply)
+
+                    # **اختياري**: للحفاظ على الذاكرة، قلل طول الجلسة إذا كبرت جداً (احذف أقدم الرسائل)
+                    if len(user_sessions[sender_id]) > 10:
+                        user_sessions[sender_id] = user_sessions[sender_id][-10:]
+
     return "ok", 200
 
 if __name__ == "__main__":
