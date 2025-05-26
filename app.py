@@ -1,14 +1,15 @@
 from flask import Flask, request
 import requests, os
-from openai import OpenAI
+import cohere
 from collections import defaultdict
 
 app = Flask(__name__)
+
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 
-client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+co = cohere.Client(COHERE_API_KEY)
 
 user_sessions = defaultdict(list)
 
@@ -17,7 +18,10 @@ def send_message(recipient_id, message_text):
         "https://graph.facebook.com/v13.0/me/messages",
         params={"access_token": PAGE_ACCESS_TOKEN},
         headers={"Content-Type": "application/json"},
-        json={"recipient": {"id": recipient_id}, "message": {"text": message_text}}
+        json={
+            "recipient": {"id": recipient_id},
+            "message": {"text": message_text}
+        }
     )
 
 @app.route('/webhook', methods=['GET'])
@@ -38,29 +42,36 @@ def webhook():
                     if not user_message:
                         return "ok", 200
 
-                    system_prompt = """ 
-                    ... (نفس النص اللي كتبته أنت هنا) ...
-                    """
+                    # أضف رسالة المستخدم إلى الجلسة
+                    user_sessions[sender_id].append({"role": "USER", "message": user_message})
 
-                    user_sessions[sender_id].append({"role": "user", "content": user_message})
-                    messages = [{"role": "system", "content": system_prompt}] + user_sessions[sender_id]
+                    # برومبت يحدد دور النموذج
+                    system_prompt = {
+                        "role": "SYSTEM",
+                        "message": "أنت موظف لدى مكتب الأصيل. وظيفتك هي الرد على استفسارات الزبائن بكل ود واحترام، وتقديم المساعدة بأفضل شكل ممكن."
+                    }
+
+                    # دمج البرومبت مع محادثات المستخدم
+                    chat_history = [system_prompt] + user_sessions[sender_id]
 
                     try:
-                        response = client.chat.completions.create(
-                            model="deepseek-chat",
-                            messages=messages,
-                            max_tokens=500,
+                        response = co.chat(
+                            chat_history=chat_history,
+                            model="command-r",
                             temperature=0.7,
-                            stream=False
+                            max_tokens=500
                         )
-                        reply = response.choices[0].message.content
-                    except Exception:
+                        reply = response.text
+                    except Exception as e:
                         reply = "عذرًا، حدث خطأ أثناء المعالجة."
 
+                    # إرسال الرد للمستخدم
                     send_message(sender_id, reply)
 
+                    # تقليل عدد الرسائل المخزنة لكل مستخدم
                     if len(user_sessions[sender_id]) > 10:
                         user_sessions[sender_id] = user_sessions[sender_id][-10:]
+
     return "ok", 200
 
 if __name__ == "__main__":
