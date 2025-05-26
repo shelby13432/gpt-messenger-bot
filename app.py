@@ -74,7 +74,8 @@ def webhook():
                         max_tokens=100
                     )
                     # استخراج نص الرد من نتيجة API
-                    reply = response.message.text.strip()
+                    reply = response.message.content[0].text.strip()
+
 
                     if not reply:
                         reply = "عذرًا، لم أفهم سؤالك، هل يمكنك إعادة الصياغة؟"
