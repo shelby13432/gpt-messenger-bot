@@ -8,7 +8,6 @@ app = Flask(__name__)
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-AUTHORIZED_USER = os.getenv("AUTHORIZED_USER")  # Facebook ID خاصتك
 
 openai.api_key = OPENAI_API_KEY
 
@@ -37,9 +36,7 @@ def webhook():
                 if messaging_event.get('message'):
                     sender_id = messaging_event['sender']['id']
 
-                    if sender_id != AUTHORIZED_USER:
-                        send_message(sender_id, "البوت في وضع التجربة حاليا، غير مسموح بالدردشة.")
-                        return "ok", 200
+                  
 
                     user_message = messaging_event['message'].get('text')
                     if not user_message:
