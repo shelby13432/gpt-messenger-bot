@@ -59,7 +59,7 @@ def webhook():
 
                     prompt = {
                         "role": "SYSTEM",
-                        "message": "Welcome! I'm here to assist you. What's your query?"
+                        "message": "Welcome! I'm here to assist you. What's yourquery?"
                     }
 
                     chat_history = [prompt] + user_sessions[sender_id]
