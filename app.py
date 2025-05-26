@@ -56,13 +56,14 @@ def webhook():
 			"content": [
 				{
 					"type": "text",
-					"text": "مرحبا"
+					"text": f"أنت بوت مساعد للرد على استفسارات الزبائن. سؤالي هو: {message_text}"
+
 				}
 			]
 		},
 		{
 			"role": "assistant",
-			"content": "مرحبا بك! كيف يمكنني مساعدتك اليوم؟"
+			"content": "انت موظف لدى مكتب الاصيل اجب على اسالة الزبائن حتى لو سألوك عن هاتف معين"
 		}
 	]
 
@@ -74,7 +75,7 @@ def webhook():
                         max_tokens=100
                     )
                     # استخراج نص الرد من نتيجة API
-                    reply = response.message.content[0].text.strip()
+                    reply = response.choices[0].message['content'][0]['text'].strip()
 
 
                     if not reply:
