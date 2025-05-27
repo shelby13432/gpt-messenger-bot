@@ -2,6 +2,7 @@ from flask import Flask, request
 import requests
 import os
 import json
+import re
 from cohere import ClientV2
 
 app = Flask(__name__)
@@ -73,29 +74,28 @@ def webhook():
                 sender_id = messaging_event["sender"]["id"]
                 message_text = messaging_event["message"]["text"]
 
-                # هنا نبحث في النص عن المحافظة والمنطقة، مثال: "بغداد الكرادة"
-                # نفترض المستخدم يكتب: "<محافظة> <منطقة>" (مثلاً: بغداد الكرادة)
-                # يمكنك تطوير طريقة الفحص حسب حاجتك، هنا فقط مثال بسيط:
+                # استخراج رقم هاتف صالح (11 رقم متتابع)
+                phone_match = re.search(r'\b\d{11}\b', message_text)
+                if phone_match:
+                    phone_number = phone_match.group()
+                    phone_valid = True
+                else:
+                    phone_number = None
+                    phone_valid = False
+
+                # بحث عن المحافظة والمنطقة في النص
                 words = message_text.split()
                 province = None
                 area = None
-
-                # بحث بسيط عن محافظة + منطقة (إذا وجدت)
-                # مثلاً لو جملة تحتوي اسم محافظة ومنطقة مع بعض
-                # للبساطة، نمرر كل زوج متتالٍ من الكلمات للتحقق
-                for i in range(len(words)-1):
+                for i in range(len(words) - 1):
                     possible_province = words[i]
-                    possible_area = words[i+1]
+                    possible_area = words[i + 1]
                     if validate_location(possible_province, possible_area):
                         province = possible_province
                         area = possible_area
                         break
 
-                # تحقق من رقم الهاتف في الرسالة (11 رقم)
-                digits = [c for c in message_text if c.isdigit()]
-                phone_valid = len(digits) == 11
-
-                # شرط التحقق قبل إرسال الطلب لـ cohere
+                # تحقق من صحة رقم الهاتف
                 if not phone_valid:
                     send_message(sender_id, "يرجى إرسال رقم هاتف صالح يتكون من 11 رقماً لإتمام الحجز.")
                     continue
@@ -104,7 +104,7 @@ def webhook():
                     send_message(sender_id, "يرجى التأكد من إرسال المحافظة والمنطقة بشكل صحيح، مثلاً: بغداد الكرادة")
                     continue
 
-                # الآن بناء الرسائل للـ cohere مع البرومبت من ملف JSON
+                # بناء الرسائل للـ cohere مع البرومبت من ملف JSON
                 messages = [
                     {
                         "role": "user",
@@ -124,7 +124,6 @@ def webhook():
                         max_tokens=300
                     )
                     reply = response.message.content[0].text.strip()
-
                     if not reply:
                         reply = "عذرًا، لم أفهم سؤالك، هل يمكنك إعادة الصياغة؟"
                 except Exception as e:
