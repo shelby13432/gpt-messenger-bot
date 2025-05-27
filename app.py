@@ -2,7 +2,6 @@ from flask import Flask, request
 import requests
 import os
 import json
-import re
 from cohere import ClientV2
 
 app = Flask(__name__)
@@ -14,10 +13,6 @@ COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 
 # إنشاء عميل cohere V2
 client = ClientV2(api_key=COHERE_API_KEY)
-
-# تحميل بيانات المواقع من ملف JSON
-with open("locations.json", "r", encoding="utf-8") as f:
-    locations_data = json.load(f)
 
 # تحميل نص البرومبت من ملف JSON
 with open("prompt.json", "r", encoding="utf-8") as f:
@@ -39,20 +34,6 @@ def send_message(recipient_id, text):
     except requests.exceptions.RequestException as e:
         print(f"Error sending message: {e}")
 
-def validate_location(province, area):
-    """التحقق من وجود المحافظة والمنطقة ضمن البيانات"""
-    if not province or not area:
-        return False
-    province = province.strip()
-    area = area.strip()
-    # تحقق المحافظة
-    if province not in locations_data:
-        return False
-    # تحقق المنطقة داخل المحافظة
-    if area not in locations_data[province]:
-        return False
-    return True
-
 @app.route("/webhook", methods=["GET"])
 def verify():
     token = request.args.get("hub.verify_token")
@@ -73,36 +54,6 @@ def webhook():
             if messaging_event.get("message") and "text" in messaging_event["message"]:
                 sender_id = messaging_event["sender"]["id"]
                 message_text = messaging_event["message"]["text"]
-
-                # استخراج رقم هاتف صالح (11 رقم متتابع)
-                phone_match = re.search(r'\b\d{11}\b', message_text)
-                if phone_match:
-                    phone_number = phone_match.group()
-                    phone_valid = True
-                else:
-                    phone_number = None
-                    phone_valid = False
-
-                # بحث عن المحافظة والمنطقة في النص
-                words = message_text.split()
-                province = None
-                area = None
-                for i in range(len(words) - 1):
-                    possible_province = words[i]
-                    possible_area = words[i + 1]
-                    if validate_location(possible_province, possible_area):
-                        province = possible_province
-                        area = possible_area
-                        break
-
-                # تحقق من صحة رقم الهاتف
-                if not phone_valid:
-                    send_message(sender_id, "يرجى إرسال رقم هاتف صالح يتكون من 11 رقماً لإتمام الحجز.")
-                    continue
-
-                if not province or not area:
-                    send_message(sender_id, "يرجى التأكد من إرسال المحافظة والمنطقة بشكل صحيح، مثلاً: بغداد الكرادة")
-                    continue
 
                 # بناء الرسائل للـ cohere مع البرومبت من ملف JSON
                 messages = [
