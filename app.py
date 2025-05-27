@@ -2,6 +2,7 @@ from flask import Flask, request
 import requests
 import os
 from cohere import ClientV2
+import json  # استيراد json لتحميل ملف المواقع
 
 app = Flask(__name__)
 
@@ -12,6 +13,10 @@ COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 
 # إنشاء عميل cohere V2
 client = ClientV2(api_key=COHERE_API_KEY)
+
+# تحميل بيانات المحافظات والمناطق من ملف JSON مرة واحدة
+with open("locations.json", "r", encoding="utf-8") as f:
+    locations_data = json.load(f)
 
 def send_message(recipient_id, text):
     """إرسال رسالة نصية إلى مستخدم في فيسبوك"""
@@ -26,6 +31,22 @@ def send_message(recipient_id, text):
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
         print(f"Error sending message: {e}")
+
+def check_location_validity(text):
+    """
+    يبحث عن محافظة ومنطقة في النص ويتحقق من صحتها.
+    يعيد (True, المحافظة, المنطقة) إذا صح، أو (False, None, None) إذا خطأ.
+    """
+    iraq_locations = locations_data.get("العراق", {})
+    for province, areas in iraq_locations.items():
+        if province in text:
+            for area in areas:
+                if area in text:
+                    return True, province, area
+            # المحافظة موجودة لكن المنطقة غير موجودة أو غير صحيحة
+            return False, province, None
+    # لم تجد المحافظة في النص أصلاً
+    return False, None, None
 
 @app.route("/webhook", methods=["GET"])
 def verify():
@@ -48,9 +69,18 @@ def webhook():
                 sender_id = messaging_event["sender"]["id"]
                 message_text = messaging_event["message"]["text"]
 
+                # التحقق من المحافظة والمنطقة في نص المستخدم
+                valid_location, province, area = check_location_validity(message_text)
+
+                if not valid_location:
+                    if province and not area:
+                        reply = f"المنطقة غير موجودة أو غير صحيحة ضمن محافظة {province}. الرجاء التحقق من المنطقة."
+                    else:
+                        reply = "يرجى ذكر المحافظة والمنطقة الصحيحة معاً. مثال: بغداد الكرادة."
+                    send_message(sender_id, reply)
+                    continue  # تجاهل باقي المعالجة لهذه الرسالة
+
                 messages = [
-                    
-                   
                     {
                         "role": "user",
                         "content": """
@@ -151,40 +181,30 @@ def webhook():
 يومياً من الساعة 10 صباحاً إلى 11 مساءً  
 عدا يوم الجمعة من الساعة 3 مساءً إلى 11 مساءً  
 في حال احد سالك عن مكتب الاصيل اخبرهم نحن مكتب محترم ولدينا ضمان وجميع اجهزتنا مفحوصة بعناية مع ضمان ما بعد البيع
-في حال الزبون اراد ان يحجز اجمع رقم هاتف العميل وتأكد من أنه يتكون من 11 رقمًا.
-مع جمع عنوان العميل والتحقق من أن العنوان يحتوي على المحافظة والمنطقة الصحيحة
-يجب ان تتاكد بان المنطقة المذكوة موجود بالمحافظة المذكورة
-وشرط ان تتحقق الشخص ادخل المحافظة والمدينة
-لا يمكن لاي يسبب كان ان يتم ذكر المحافظة فقط دون المنطقة
-وفي حال احد اخبرك البصرة فقط اساله يجب ارسال المنطفة ايضا
-ولا تثبت اي طلب لاي زبون اذا لم يرسل رقم هاتفه
-
-"""
+في حال الزبون اراد ان يحجز اجمع رقم هاتف العميل وتأكد من أنه ارسل المحافظة والمنطقة في الرسالة
+                        """
                     },
-                     {
+                    {
                         "role": "user",
                         "content": message_text
                     }
                 ]
 
                 try:
-                    response = client.chat(
-                        model="command-r",
+                    response = client.chat.completions.create(
+                        model="command-xlarge-nightly",
                         messages=messages,
-                        temperature=0.5,
-                        max_tokens=300
+                        temperature=0.3,
+                        max_tokens=600,
                     )
-                    reply = response.message.content[0].text.strip()
-
-                    if not reply:
-                        reply = "عذرًا، لم أفهم سؤالك، هل يمكنك إعادة الصياغة؟"
+                    reply = response.choices[0].message.content
                 except Exception as e:
-                    print(f"Error calling Cohere API: {e}")
-                    reply = "عذرًا، حدث خطأ داخلي. الرجاء المحاولة لاحقًا."
+                    print(f"Error in Cohere API: {e}")
+                    reply = "عذراً، حدث خطأ في معالجة طلبك."
 
                 send_message(sender_id, reply)
 
-    return "ok", 200
+    return "OK", 200
 
 if __name__ == "__main__":
-    app.run(debug=True, port=10000)
+    app.run(debug=True)
