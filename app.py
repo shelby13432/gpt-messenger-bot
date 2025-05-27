@@ -15,10 +15,9 @@ COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 client = ClientV2(api_key=COHERE_API_KEY)
 
 # تحميل نص البرومبت من ملف JSON
-with open("prompt.json", "r", encoding="utf-8") as f:
-    prompt_data = json.load(f)
+with open("prompt.txt", "r", encoding="utf-8") as f:
+    system_prompt_text = f.read()
 
-system_prompt_text = prompt_data.get("system_prompt", "")
 
 def send_message(recipient_id, text):
     """إرسال رسالة نصية إلى مستخدم في فيسبوك"""
